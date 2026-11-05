@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SickleScan · Blood smear sickle cell analyzer</title>
+  <meta name="description" content="Count red blood cells and estimate the percentage of sickled cells in a blood smear photo. Runs in your browser; images never leave your device.">
+  <meta name="theme-color" content="#8f1d33">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/styles.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="favicon.svg" alt="" width="28" height="28">
+      <div>
+        <h1>SickleScan</h1>
+        <p class="tagline">Blood smear sickle cell analyzer</p>
+      </div>
+    </div>
+    <span class="badge" title="Not a medical device">Research &amp; education use only</span>
+  </header>
+
+  <main class="layout">
+    <!-- Viewer -->
+    <section class="viewer" aria-label="Image viewer">
+      <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-describedby="drop-help">
+        <svg class="drop-icon" viewBox="0 0 48 48" aria-hidden="true"><circle cx="17" cy="20" r="9" fill="none" stroke="currentColor" stroke-width="2.5"/><circle cx="17" cy="20" r="3.5" fill="currentColor" opacity=".35"/><path d="M30 34c4-10 10-12 14-12-3 3-7 9-14 12z" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/><circle cx="32" cy="12" r="6" fill="none" stroke="currentColor" stroke-width="2.5"/></svg>
+        <p class="drop-title">Drop a blood smear image here</p>
+        <p id="drop-help" class="drop-help">JPG, PNG or WebP up to 15 MB · processed on your device, never uploaded</p>
+        <div class="drop-actions">
+          <label class="btn btn-primary">
+            Choose image
+            <input id="file-input" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+          </label>
+          <label class="btn btn-mobile">
+            Take photo
+            <input id="camera-input" type="file" accept="image/*" capture="environment" hidden>
+          </label>
+          <button id="sample-btn" class="btn" type="button">Try sample image</button>
+        </div>
+      </div>
+
+      <div id="stage" class="stage" hidden>
+        <div class="stage-toolbar">
+          <span id="image-name" class="image-name"></span>
+          <div class="toolbar-actions">
+            <label class="toggle"><input id="overlay-toggle" type="checkbox" checked> Outlines</label>
+            <label class="toggle"><input id="invert-toggle" type="checkbox"> Cells lighter than background</label>
+            <button id="new-btn" class="btn btn-small" type="button">New image</button>
+          </div>
+        </div>
+        <div class="canvas-wrap">
+          <canvas id="canvas" aria-label="Smear image with detected cells outlined"></canvas>
+          <div id="busy" class="busy" hidden><span class="spinner" aria-hidden="true"></span><span>Analysing cells…</span></div>
+        </div>
+        <ul class="legend" aria-label="Legend">
+          <li><i class="sw sw-normal"></i>Normal</li>
+          <li><i class="sw sw-borderline"></i>Borderline</li>
+          <li><i class="sw sw-sickled"></i>Sickled</li>
+          <li><i class="sw sw-clump"></i>Clump (excluded)</li>
+          <li><i class="sw sw-edge"></i>Edge cell (excluded)</li>
+        </ul>
+        <p class="hint">Tap or click a cell to see its measurements.</p>
+      </div>
+      <p id="error" class="error" role="alert" hidden></p>
+    </section>
+
+    <!-- Panel -->
+    <aside class="panel" aria-label="Results and controls">
+      <section class="card" aria-labelledby="results-h">
+        <h2 id="results-h">Results</h2>
+        <div class="headline">
+          <span id="pct" class="pct">–</span>
+          <span class="pct-label">of counted cells look sickled</span>
+        </div>
+        <dl class="stats">
+          <div><dt>Cells counted</dt><dd id="s-total">–</dd></div>
+          <div><dt><i class="sw sw-normal"></i>Normal</dt><dd id="s-normal">–</dd></div>
+          <div><dt><i class="sw sw-borderline"></i>Borderline</dt><dd id="s-borderline">–</dd></div>
+          <div><dt><i class="sw sw-sickled"></i>Sickled</dt><dd id="s-sickled">–</dd></div>
+          <div><dt><i class="sw sw-clump"></i>Clumps excluded</dt><dd id="s-clump">–</dd></div>
+          <div><dt><i class="sw sw-edge"></i>Edge cells excluded</dt><dd id="s-edge">–</dd></div>
+        </dl>
+        <p id="quality" class="quality" hidden></p>
+        <p class="disclaimer">Screening aid for research and teaching. Not a diagnosis: confirm with HPLC or haemoglobin electrophoresis and clinical review.</p>
+      </section>
+
+      <section id="cell-card" class="card" aria-labelledby="cell-h" hidden>
+        <h2 id="cell-h">Cell <span id="cell-id"></span> <span id="cell-class" class="pill"></span></h2>
+        <dl class="stats compact" id="cell-stats"></dl>
+      </section>
+
+      <section class="card" aria-labelledby="tune-h">
+        <h2 id="tune-h">Classification thresholds</h2>
+        <div class="slider">
+          <label for="t-sickle">Sickled if elongation ≥ <output id="o-sickle"></output></label>
+          <input id="t-sickle" type="range" min="1.5" max="3.5" step="0.05">
+        </div>
+        <div class="slider">
+          <label for="t-border">Borderline if elongation ≥ <output id="o-border"></output></label>
+          <input id="t-border" type="range" min="1.1" max="2.5" step="0.05">
+        </div>
+        <div class="slider">
+          <label for="t-circ">…or sickled if circularity &lt; <output id="o-circ"></output> (and elongation ≥ 1.6)</label>
+          <input id="t-circ" type="range" min="0.2" max="0.9" step="0.01">
+        </div>
+        <div class="slider">
+          <label for="t-clump">Clump if area &gt; <output id="o-clump"></output> × median cell</label>
+          <input id="t-clump" type="range" min="1.5" max="4" step="0.1">
+        </div>
+        <button id="reset-btn" class="btn btn-small" type="button">Reset to defaults</button>
+      </section>
+
+      <section class="card" aria-labelledby="save-h">
+        <h2 id="save-h">Save &amp; export</h2>
+        <label class="field">
+          <span>Label (optional)</span>
+          <input id="label-input" type="text" maxlength="80" placeholder="e.g. Slide 12, field 3">
+        </label>
+        <div class="row">
+          <button id="save-btn" class="btn btn-primary" type="button" disabled>Save result</button>
+          <button id="csv-btn" class="btn" type="button" disabled>CSV</button>
+          <button id="png-btn" class="btn" type="button" disabled>PNG</button>
+        </div>
+        <p id="save-status" class="muted" aria-live="polite"></p>
+      </section>
+
+      <section class="card" aria-labelledby="hist-h">
+        <h2 id="hist-h">History <span id="hist-mode" class="pill pill-quiet"></span></h2>
+        <ul id="history" class="history"></ul>
+        <p id="hist-empty" class="muted">No saved results yet.</p>
+      </section>
+    </aside>
+  </main>
+
+  <footer class="footer">
+    <p>SickleScan v1 (rule-based shape analysis). Images are processed in your browser and are never uploaded. Saved results hold only counts and your label.</p>
+  </footer>
+</body>
+</html>

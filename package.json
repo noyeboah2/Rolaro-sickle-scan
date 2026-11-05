@@ -1,0 +1,17 @@
+{
+  "name": "sicklescan",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Browser-based sickle cell blood smear analyzer, hosted on Cloudflare Workers",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "node --test test/*.test.mjs",
+    "db:create": "wrangler d1 create sicklescan-db",
+    "db:migrate": "wrangler d1 execute sicklescan-db --remote --file=./schema.sql"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

@@ -1,0 +1,25 @@
+name = "sicklescan"
+main = "src/worker.js"
+compatibility_date = "2025-10-01"
+
+# Static site (HTML, CSS, JS, sample image) served from ./public.
+# Requests that match no file fall through to src/worker.js (the /api routes).
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+[observability]
+enabled = true
+
+# ---------------------------------------------------------------------------
+# OPTIONAL: cloud history in Cloudflare D1.
+# The app works without this (history is then kept on each user's device).
+# To enable:
+#   1. npx wrangler d1 create sicklescan-db
+#   2. Paste the database_id it prints below and uncomment these 4 lines
+#   3. Commit and push (Cloudflare redeploys). The table is created automatically.
+# ---------------------------------------------------------------------------
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "sicklescan-db"
+# database_id = "PASTE-YOUR-DATABASE-ID-HERE"
