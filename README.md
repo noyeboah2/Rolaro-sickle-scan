@@ -26,6 +26,16 @@ Browser-based blood smear analyzer for sickle cell disease. It counts red blood 
 
 Every push to `main` redeploys automatically.
 
+### Using a Cloudflare Pages project instead (`*.pages.dev`)
+
+This also works. In the Pages project go to **Settings → Build** and set:
+
+- **Framework preset:** None
+- **Build command:** leave empty
+- **Build output directory:** `public`  ← required; without it the site is blank
+
+Then go to **Deployments → Retry deployment** (or push a commit). The `/api` routes run from the `functions/` folder automatically. For cloud history on Pages, add the D1 binding under **Settings → Bindings → D1 database**, with variable name `DB`.
+
 ### Optional: turn on cloud history (D1)
 
 ```bash
