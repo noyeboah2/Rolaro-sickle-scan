@@ -1,4 +1,4 @@
-# SickleScan
+ # SickleScan
 
 Browser-based blood smear analyzer for sickle cell disease. It counts red blood cells in a stained smear photo, classifies each cell's shape as **normal**, **borderline** or **sickled**, and reports the percentage of sickled cells.
 
