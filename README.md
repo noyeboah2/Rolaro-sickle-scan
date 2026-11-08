@@ -1,111 +1,74 @@
- # SickleScan
+# SickleScan Lab
 
-Browser-based blood smear analyzer for sickle cell disease. It counts red blood cells in a stained smear photo, classifies each cell's shape as **normal**, **borderline** or **sickled**, and reports the percentage of sickled cells.
+A browser-based lab workspace for sickle cell blood smear analysis. It analyses several microscope fields per slide, lets the technician correct any cell, pools the counts into a % sickled with a 95% interval, raises QC flags, tracks each patient over time and prints a report.
 
-- Images are processed **in the browser** (Web Worker) and never uploaded.
-- Hosted on **Cloudflare Workers** with static assets; no build step.
-- Optional **Cloudflare D1** database for shared history. Without it, history is kept on each device.
+- **Local-first and private.** Patients, slides and images are stored in the browser (IndexedDB) on the lab's computer. Nothing is uploaded and there are no accounts. Patients are identified by codes only.
+- **No build step.** Plain HTML, CSS and JavaScript modules, deployed on Cloudflare Pages or Workers.
 
 > Research and education use only. Not a diagnostic device. Confirm with HPLC or haemoglobin electrophoresis and clinical review.
 
-## Deploy to Cloudflare (about 3 minutes)
+## Features
 
-1. Create a new GitHub repository and push this folder to it:
-   ```bash
-   git init && git add . && git commit -m "SickleScan v1"
-   git branch -M main
-   git remote add origin https://github.com/<you>/sicklescan.git
-   git push -u origin main
-   ```
-2. In the Cloudflare dashboard: **Workers & Pages → Create → Import a repository** and pick the repo.
-3. Use these settings (they are usually filled in automatically):
-   - **Build command:** leave empty
-   - **Deploy command:** `npx wrangler deploy`
-   - **Root directory:** `/`
-4. Click **Deploy**. Your app goes live at `https://sicklescan.<your-subdomain>.workers.dev`.
+| Area | What it does |
+| --- | --- |
+| Dashboard | Patients, slides reported, cells counted, slides per week chart, items needing attention, latest result per patient |
+| Patients | Coded records with sex, birth year, genotype on record, hydroxyurea status and start date; search and genotype filter |
+| Patient page | % sickled timeline with 95% intervals and the hydroxyurea start marked; change since previous and since first slide |
+| Slide workspace | Slide details (date, stain, magnification, technician); add many field images (drop, choose, camera, paste); per-field include/exclude; re-analyse for light cells; autosave |
+| Cell review | Click a cell to see its measurements; reclassify with buttons or keys N, B, S, X, R; corrected cells are marked |
+| Slide total | Pooled counts across fields, 95% Wilson interval, composition bar, descriptive band, QC flags (minimum cells, clumps, field disagreement) |
+| Report | Printable A4 report (Print / Save as PDF) with patient and sample details, results, QC notes, field table, annotated thumbnails, method and sign-off lines; draft watermark |
+| Exports | Per-slide cell CSV, all-slides summary CSV, full JSON backup (with or without images) and restore |
+| Settings | Lab name and report footer, QC limits, lab default thresholds, storage use, erase all |
 
-Every push to `main` redeploys automatically.
+## Deploy on Cloudflare Pages
 
-### Using a Cloudflare Pages project instead (`*.pages.dev`)
+Repo layout must have `public/`, `functions/`, `src/` at the top level.
 
-This also works. In the Pages project go to **Settings → Build** and set:
+Settings → Build configuration:
 
-- **Framework preset:** None
-- **Build command:** leave empty
-- **Build output directory:** `public`  ← required; without it the site is blank
+- Framework preset: **None**
+- Build command: **empty**
+- Build output directory: **`public`**
+- Root directory: **empty**
 
-Then go to **Deployments → Retry deployment** (or push a commit). The `/api` routes run from the `functions/` folder automatically. For cloud history on Pages, add the D1 binding under **Settings → Bindings → D1 database**, with variable name `DB`.
-
-### Optional: turn on cloud history (D1)
-
-```bash
-npm install
-npx wrangler login
-npx wrangler d1 create sicklescan-db
-```
-
-Copy the `database_id` it prints into `wrangler.toml`, uncomment the `[[d1_databases]]` block, then commit and push. The table is created automatically on first use (or run `npm run db:migrate`). The History panel badge changes from **This device** to **Cloud**.
+Push to `main` to deploy. (On a Workers project instead, use deploy command `npx wrangler deploy`.)
 
 ## Run locally
 
 ```bash
 npm install
-npm run dev      # http://localhost:8787
-npm test         # analysis engine unit tests
+npx wrangler pages dev public   # http://localhost:8788
+npm test                        # engine + aggregation unit tests
 ```
-
-## How it works
-
-| Step | What happens |
-| --- | --- |
-| 1 | Image resized to at most 1400 px on the longest side |
-| 2 | Green channel extracted (haemoglobin absorbs green, so cells read dark) |
-| 3 | 3×3 blur, then Otsu automatic threshold |
-| 4 | Morphological opening removes specks; hole filling fills each cell's pale centre |
-| 5 | Connected regions labelled; each traced for outline and perimeter |
-| 6 | Shape measures: area, circularity 4πA/P², elongation √(λ1/λ2), solidity A/A_hull |
-| 7 | Rules classify each region; thresholds adjustable live in the UI |
-
-Default rules: **sickled** if elongation ≥ 2.0, or elongation ≥ 1.6 with circularity < 0.55. **Borderline** if elongation ≥ 1.5. **Clump** if area > 2.2× median cell, or solidity < 0.80 with area > 1.5× median. **Debris** if area < 0.25× median. Cells touching the image edge are excluded. % sickled = sickled ÷ (normal + borderline + sickled).
-
-## Best results
-
-- Use the thin monolayer area of the smear, where cells do not overlap.
-- 40× to 100× magnification, in focus, evenly lit.
-- Analyse several fields per slide and look at the trend, not one number.
-- If your stain makes cells lighter than the background, tick **Cells lighter than background**.
-
-## API
-
-| Method | Path | Notes |
-| --- | --- | --- |
-| GET | `/api/health` | `{ ok, db, version }` |
-| GET | `/api/analyses?limit=50` | Newest first, max 100 |
-| POST | `/api/analyses` | JSON summary (no image). 201 `{ id, created_at }` |
-| GET | `/api/analyses/:id` | One result |
-| DELETE | `/api/analyses/:id` | 204 |
-
-Without a D1 binding, data endpoints return `503 database_not_configured` and the app falls back to on-device history.
 
 ## Project layout
 
 ```
-public/            static site (served by Cloudflare assets)
-  index.html
-  css/styles.css
-  js/app.js        UI, drawing, export, save
-  js/analysis.js   image analysis engine (pure functions)
-  js/analysis-worker.js
-  js/history.js    D1 / on-device history
-  sample-smear.jpg synthetic demo image (generated, not patient data)
-  _headers         security headers (CSP)
-src/worker.js      /api routes + D1
-schema.sql         D1 schema (auto-applied)
-test/              Node unit tests
-wrangler.toml      Cloudflare config
+public/
+  index.html            app shell + navigation
+  css/styles.css        all styles, including print layout for reports
+  js/main.js            hash router
+  js/db.js              IndexedDB storage, backup/restore
+  js/analysis.js        image analysis engine (segmentation, shape measures, rules)
+  js/analysis-worker.js runs the engine off the main thread
+  js/engine.js          image loading, drawing, hit-testing
+  js/aggregate.js       corrections, pooling across fields, QC flags, CSV
+  js/charts.js          SVG charts
+  js/ui.js              DOM helpers, dialogs, toasts
+  js/views/*.js         dashboard, patients, patient, slides, workspace, report, settings, guide
+  sample-smear.jpg      synthetic demo image (generated, not patient data)
+functions/api/          Pages Functions entry for the optional /api routes
+src/worker.js           optional API (health + D1 summaries); not needed by the app
+test/                   Node unit tests
 ```
+
+## How the analysis works
+
+Green channel → 3×3 blur → Otsu threshold → opening → hole filling → connected regions → contour tracing → area, circularity 4πA/P², elongation √(λ1/λ2), solidity. Default rules: **sickled** if elongation ≥ 2.0, or ≥ 1.6 with circularity < 0.55; **borderline** if elongation ≥ 1.5; **clump** if area > 2.2× median (or low solidity and > 1.5× median); **debris** if area < 0.25× median; cells touching the image edge are excluded. Technician corrections override the rules. Slide % sickled = pooled sickled ÷ (normal + borderline + sickled) across included fields.
 
 ## Roadmap
 
-- **v1.1** Watershed splitting of touching cells; batch analysis of several fields.
-- **v2** Trained detector (YOLO or MobileNet) exported to ONNX and run in the browser with ONNX Runtime Web; the rule-based engine stays as a fallback. Only `classifyCells` / `segmentAndMeasure` in `analysis.js` change.
+- Watershed splitting of touching cells
+- Trained detector (ONNX in the browser) alongside the rule engine
+- Optional multi-user cloud sync with logins (needed before any shared online storage of patient data)
